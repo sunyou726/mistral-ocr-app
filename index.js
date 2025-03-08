@@ -1,7 +1,6 @@
-
 const htmlForm = `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -80,6 +79,31 @@ const htmlForm = `
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    .api-key-container {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .save-key-btn {
+      background-color: #27ae60;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+      white-space: nowrap;
+    }
+    .save-key-btn:hover {
+      background-color: #219653;
+    }
+    .saved-key-info {
+      font-size: 14px;
+      color: #27ae60;
+      margin-top: 5px;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -89,7 +113,11 @@ const htmlForm = `
     <form id="pdfForm">
       <div class="form-group">
         <label for="apiKey">Mistral API key</label>
-        <input type="text" id="apiKey" name="apiKey" required placeholder="Enter your Mistral API key">
+        <div class="api-key-container">
+          <input type="text" id="apiKey" name="apiKey" required placeholder="Enter your Mistral API key">
+          <button type="button" id="saveKeyBtn" class="save-key-btn">Save API Key</button>
+        </div>
+        <div id="savedKeyInfo" class="saved-key-info">API Key saved locally, will be auto-filled next time</div>
       </div>
       
       <div class="form-group">
@@ -97,17 +125,43 @@ const htmlForm = `
         <input type="file" id="pdfFile" name="pdfFile" accept=".pdf" required>
       </div>
       
-      <button type="submit" id="submitBtn">转换并下载Markdown</button>
+      <button type="submit" id="submitBtn">Convert and Download Markdown</button>
     </form>
     
     <div id="status"></div>
     
     <div class="api-key-info">
-      <p><strong>Note:</strong> Your API key is only used for this session, and will not be stored.</p>
+      <p><strong>Note:</strong> Your API key is only used for this session. If you choose to save it, it will be stored only in your browser locally and not sent to the server.</p>
     </div>
   </div>
   
   <script>
+    // Check for saved API Key on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      const savedApiKey = localStorage.getItem('mistralApiKey');
+      const apiKeyInput = document.getElementById('apiKey');
+      const savedKeyInfo = document.getElementById('savedKeyInfo');
+      
+      if (savedApiKey) {
+        apiKeyInput.value = savedApiKey;
+        savedKeyInfo.style.display = 'block';
+      }
+    });
+    
+    // Save API Key functionality
+    document.getElementById('saveKeyBtn').addEventListener('click', function() {
+      const apiKey = document.getElementById('apiKey').value;
+      const savedKeyInfo = document.getElementById('savedKeyInfo');
+      
+      if (apiKey) {
+        localStorage.setItem('mistralApiKey', apiKey);
+        savedKeyInfo.style.display = 'block';
+        alert('API Key successfully saved!');
+      } else {
+        alert('Please enter an API Key first');
+      }
+    });
+
     document.getElementById('pdfForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       
@@ -159,7 +213,7 @@ const htmlForm = `
           window.URL.revokeObjectURL(url);
           
           statusDiv.style.backgroundColor = '#ddffdd';
-          statusDiv.innerHTML = '转换成功！Markdown文件已下载。';
+          statusDiv.innerHTML = 'Conversion successful! Markdown file has been downloaded.';
         } else {
           // Handle error response
           const errorText = await response.text();
