@@ -32,7 +32,7 @@ const htmlForm = `
       margin-bottom: 8px;
       font-weight: bold;
     }
-    input[type="text"], input[type="file"] {
+    input[type="text"], input[type="file"], input[type="url"], input[type="password"] {
       width: 100%;
       padding: 10px;
       border: 1px solid #ddd;
@@ -104,6 +104,32 @@ const htmlForm = `
       margin-top: 5px;
       display: none;
     }
+    /* Tab styles */
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      background-color: #f1f1f1;
+      border: 1px solid #ddd;
+      border-bottom: none;
+      margin-right: 5px;
+      border-radius: 4px 4px 0 0;
+    }
+    .tab.active {
+      background-color: #fff;
+      border-bottom: 1px solid #fff;
+      margin-bottom: -1px;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -114,15 +140,32 @@ const htmlForm = `
       <div class="form-group">
         <label for="apiKey">Mistral API key</label>
         <div class="api-key-container">
-          <input type="text" id="apiKey" name="apiKey" required placeholder="Enter your Mistral API key">
+          <input type="password" id="apiKey" name="apiKey" required placeholder="Enter your Mistral API key">
           <button type="button" id="saveKeyBtn" class="save-key-btn">Save API Key</button>
         </div>
         <div id="savedKeyInfo" class="saved-key-info">API Key saved locally, will be auto-filled next time</div>
       </div>
       
-      <div class="form-group">
-        <label for="pdfFile">Upload PDF file</label>
-        <input type="file" id="pdfFile" name="pdfFile" accept=".pdf" required>
+      <!-- Input Method Tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="fileUpload">Upload File</div>
+        <div class="tab" data-tab="urlInput">URL Input</div>
+      </div>
+      
+      <!-- File Upload Tab Content -->
+      <div id="fileUpload" class="tab-content active">
+        <div class="form-group">
+          <label for="pdfFile">Upload PDF file</label>
+          <input type="file" id="pdfFile" name="pdfFile" accept=".pdf">
+        </div>
+      </div>
+      
+      <!-- URL Input Tab Content -->
+      <div id="urlInput" class="tab-content">
+        <div class="form-group">
+          <label for="pdfUrl">PDF URL</label>
+          <input type="url" id="pdfUrl" name="pdfUrl" placeholder="Enter URL to PDF file (e.g., https://example.com/document.pdf)">
+        </div>
       </div>
       
       <button type="submit" id="submitBtn">Convert and Download Markdown</button>
@@ -146,6 +189,20 @@ const htmlForm = `
         apiKeyInput.value = savedApiKey;
         savedKeyInfo.style.display = 'block';
       }
+      
+      // Tab functionality
+      const tabs = document.querySelectorAll('.tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          // Remove active class from all tabs and contents
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          
+          // Add active class to clicked tab and corresponding content
+          tab.classList.add('active');
+          document.getElementById(tab.dataset.tab).classList.add('active');
+        });
+      });
     });
     
     // Save API Key functionality
@@ -167,13 +224,29 @@ const htmlForm = `
       
       const apiKey = document.getElementById('apiKey').value;
       const pdfFile = document.getElementById('pdfFile').files[0];
+      const pdfUrl = document.getElementById('pdfUrl').value;
       const statusDiv = document.getElementById('status');
       const submitBtn = document.getElementById('submitBtn');
+      const activeTab = document.querySelector('.tab.active').dataset.tab;
       
-      if (!apiKey || !pdfFile) {
+      if (!apiKey) {
         statusDiv.style.display = 'block';
         statusDiv.style.backgroundColor = '#ffdddd';
-        statusDiv.innerHTML = 'Please fill in the API key and upload the PDF file';
+        statusDiv.innerHTML = 'Please enter your Mistral API key';
+        return;
+      }
+      
+      if (activeTab === 'fileUpload' && !pdfFile) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.backgroundColor = '#ffdddd';
+        statusDiv.innerHTML = 'Please upload a PDF file';
+        return;
+      }
+      
+      if (activeTab === 'urlInput' && !pdfUrl) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.backgroundColor = '#ffdddd';
+        statusDiv.innerHTML = 'Please enter a PDF URL';
         return;
       }
       
@@ -185,7 +258,13 @@ const htmlForm = `
       
       const formData = new FormData();
       formData.append('apiKey', apiKey);
-      formData.append('pdfFile', pdfFile);
+      formData.append('inputType', activeTab);
+      
+      if (activeTab === 'fileUpload') {
+        formData.append('pdfFile', pdfFile);
+      } else {
+        formData.append('pdfUrl', pdfUrl);
+      }
       
       try {
         const response = await fetch('/convert', {
@@ -207,7 +286,20 @@ const htmlForm = `
           const a = document.createElement('a');
           a.style.display = 'none';
           a.href = url;
-          a.download = pdfFile.name.replace('.pdf', '.md');
+          
+          // Use the file name from upload, or extract from URL, or use default
+          let fileName = 'document.md';
+          if (activeTab === 'fileUpload' && pdfFile) {
+            fileName = pdfFile.name.replace('.pdf', '.md');
+          } else if (activeTab === 'urlInput' && pdfUrl) {
+            const urlParts = pdfUrl.split('/');
+            const lastPart = urlParts[urlParts.length - 1];
+            if (lastPart && lastPart.includes('.pdf')) {
+              fileName = lastPart.replace('.pdf', '.md');
+            }
+          }
+          
+          a.download = fileName;
           document.body.appendChild(a);
           a.click();
           window.URL.revokeObjectURL(url);
@@ -247,23 +339,59 @@ async function handleRequest(request) {
   if (url.pathname === '/convert' && request.method === 'POST') {
     const formData = await request.formData();
     const apiKey = formData.get('apiKey');
-    const pdfFile = formData.get('pdfFile');
+    const inputType = formData.get('inputType');
     
-    if (!apiKey || !pdfFile) {
-      return new Response('Missing API key or PDF file', { status: 400 });
+    if (!apiKey) {
+      return new Response('Missing API key', { status: 400 });
     }
     
     try {
-      // 1. Upload PDF file to Mistral API
-      const uploadResponse = await uploadFileToMistral(apiKey, pdfFile);
-      const fileId = uploadResponse.id;
+      let ocrResponse;
+      let filename = 'document.md';
       
-      // 2. Get signed URL
-      const signedUrlResponse = await getSignedUrl(apiKey, fileId);
-      const signedUrl = signedUrlResponse.url;
-      
-      // 3. Call OCR API to process document
-      const ocrResponse = await processOcr(apiKey, signedUrl);
+      // Process based on input type
+      if (inputType === 'fileUpload') {
+        const pdfFile = formData.get('pdfFile');
+        if (!pdfFile) {
+          return new Response('Missing PDF file', { status: 400 });
+        }
+        
+        // 1. Upload PDF file to Mistral API
+        const uploadResponse = await uploadFileToMistral(apiKey, pdfFile);
+        const fileId = uploadResponse.id;
+        
+        // 2. Get signed URL
+        const signedUrlResponse = await getSignedUrl(apiKey, fileId);
+        const signedUrl = signedUrlResponse.url;
+        
+        // 3. Call OCR API to process document
+        ocrResponse = await processOcr(apiKey, signedUrl);
+        
+        // Set filename based on uploaded file
+        filename = pdfFile.name.replace('.pdf', '.md');
+      } else if (inputType === 'urlInput') {
+        const pdfUrl = formData.get('pdfUrl');
+        if (!pdfUrl) {
+          return new Response('Missing PDF URL', { status: 400 });
+        }
+        
+        // Process OCR directly with URL
+        ocrResponse = await processOcrWithUrl(apiKey, pdfUrl);
+        
+        // Try to extract filename from URL
+        try {
+          const urlParts = new URL(pdfUrl).pathname.split('/');
+          const lastPart = urlParts[urlParts.length - 1];
+          if (lastPart && lastPart.includes('.pdf')) {
+            filename = lastPart.replace('.pdf', '.md');
+          }
+        } catch (e) {
+          // If URL parsing fails, keep default filename
+          console.error('Error parsing URL for filename:', e);
+        }
+      } else {
+        return new Response('Invalid input type', { status: 400 });
+      }
       
       // 4. Extract and merge Markdown
       const markdown = getCombinedMarkdown(ocrResponse);
@@ -272,7 +400,7 @@ async function handleRequest(request) {
       return new Response(markdown, {
         headers: {
           'Content-Type': 'text/plain;charset=UTF-8',
-          'Content-Disposition': `attachment; filename="${pdfFile.name.replace('.pdf', '.md')}"`,
+          'Content-Disposition': `attachment; filename="${filename}"`,
         },
       });
     } catch (error) {
@@ -345,6 +473,35 @@ async function processOcr(apiKey, signedUrl) {
       document: {
         type: "document_url",
         document_url: signedUrl,
+      },
+      include_image_base64: true
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OCR processing failed: ${errorText}`);
+  }
+  
+  return await response.json();
+}
+
+/**
+ * Process OCR request directly with document URL
+ */
+async function processOcrWithUrl(apiKey, documentUrl) {
+  const response = await fetch('https://api.mistral.ai/v1/ocr', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "mistral-ocr-latest",
+      document: {
+        type: "document_url",
+        document_url: documentUrl,
       },
       include_image_base64: true
     }),
