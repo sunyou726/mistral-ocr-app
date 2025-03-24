@@ -1,12 +1,4 @@
-from mistralai import Mistral
-
-api_key = "put your api key here"
-client = Mistral(api_key=api_key)
-
-from pathlib import Path
-
-import argparse
-
+f
 # 创建命令行参数解析器
 parser = argparse.ArgumentParser(description='处理PDF文件')
 parser.add_argument('--pdf', type=str, default="demo-mistral.pdf", help='PDF file path')
